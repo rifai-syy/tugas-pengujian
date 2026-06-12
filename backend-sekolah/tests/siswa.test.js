@@ -12,6 +12,7 @@ describe('Regression Test Suite - CRUD Users/Siswa API', () => {
       .post('/api/login')
       .send({ identifier: 'admin', password: 'password123' });
     adminToken = res.body.token;
+    console.log("LOGIN RESPONSE:", res.statusCode, JSON.stringify(res.body));
   });
 
   afterAll(async () => {
