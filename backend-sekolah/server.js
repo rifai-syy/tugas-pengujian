@@ -3,20 +3,16 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const { Op } = require('sequelize');
 
-// Import Konfigurasi Database & Seluruh Model Profil yang sudah berelasi
 const sequelize = require('./config/database');
 const { User, Admin, Guru, Siswa, Kepsek, Kelas, MataPelajaran, PenugasanGuru, Nilai } = require('./models');
 
-// 1. DEKLARASI APP HARUS DI SINI (Paling Atas Sebelum Route)
 const app = express();
 
-// 2. PASANG MIDDLEWARE
 app.use(cors());
-// Memperbesar batas JSON untuk foto Base64
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-const SECRET_KEY = "kunci_rahasia_siakad_super_aman";
+const SECRET_KEY = process.env.JWT_SECRET || "kunci_rahasia_siakad_super_aman";
 
 // ==========================================
 // ENDPOINT KHUSUS TESTING K6 TUGAS KELOMPOK
@@ -27,33 +23,33 @@ app.get('/api/test-performa', (req, res) => {
 
 // ==========================================
 // SINKRONISASI DATABASE & AUTO-SEEDING
+// Dilewati saat NODE_ENV=test karena seed.js sudah handle ini
 // ==========================================
-sequelize.sync({ alter: true })
-  .then(async () => {
-    console.log('✅ Database tersinkronisasi sempurna dengan Sequelize ORM.');
+if (process.env.NODE_ENV !== 'test') {
+  sequelize.sync({ alter: true })
+    .then(async () => {
+      console.log('✅ Database tersinkronisasi sempurna dengan Sequelize ORM.');
 
-    // --- LOGIKA DATABASE SEEDING (DIREVISI) ---
-    const jumlahUser = await User.count();
+      const jumlahUser = await User.count();
 
-    if (jumlahUser === 0) {
-      // 1. Buat Kredensial Login di tabel Users
-      const newAdmin = await User.create({
-        username: 'admin',
-        password: 'password123',
-        role: 'admin'
-      });
-      
-      // 2. Buat Profil Detailnya di tabel Admins
-      await Admin.create({
-        userId: newAdmin.id,
-        name: 'Super Admin'
-      });
+      if (jumlahUser === 0) {
+        const newAdmin = await User.create({
+          username: 'admin',
+          password: 'password123',
+          role: 'admin'
+        });
+        
+        await Admin.create({
+          userId: newAdmin.id,
+          name: 'Super Admin'
+        });
 
-      console.log('🌱 AUTO-SEED: Akun Admin pertama berhasil dibuat otomatis!');
-      console.log('➡️ Silakan login menggunakan Username: admin | Password: password123');
-    }
-  })
-  .catch(err => console.error('❌ Gagal sinkronisasi database:', err));
+        console.log('🌱 AUTO-SEED: Akun Admin pertama berhasil dibuat otomatis!');
+        console.log('➡️ Silakan login menggunakan Username: admin | Password: password123');
+      }
+    })
+    .catch(err => console.error('❌ Gagal sinkronisasi database:', err));
+}
 
 
 // ==========================================
@@ -82,7 +78,6 @@ app.post('/api/login', async (req, res) => {
   try {
     const { identifier, password } = req.body;
 
-    // Cari User sekaligus melampirkan data Profilnya masing-masing
     const user = await User.findOne({
       include: [
         { model: Admin },
@@ -104,7 +99,6 @@ app.post('/api/login', async (req, res) => {
     if (user) {
       const userData = user.toJSON();
 
-      // Ekstrak profil yang terisi sesuai Role
       let profil = {};
       if (userData.role === 'admin' && userData.Admin) profil = userData.Admin;
       if (userData.role === 'guru' && userData.Guru) profil = userData.Guru;
@@ -112,7 +106,7 @@ app.post('/api/login', async (req, res) => {
       if (userData.role === 'kepsek' && userData.Kepsek) profil = userData.Kepsek;
 
       const finalUser = {
-        id: userData.id, // ID User Utama (Bukan ID Profil)
+        id: userData.id,
         username: userData.username,
         role: userData.role,
         ...profil
@@ -154,7 +148,6 @@ app.get('/api/users', verifyToken, async (req, res) => {
   if (!allowedRoles.includes(req.user.role)) return res.status(403).json({ message: "Akses Ditolak!" });
 
   try {
-    // Ambil semua pengguna beserta profil mereka yang relevan
     const users = await User.findAll({
       include: [
         { model: Admin },
@@ -165,7 +158,6 @@ app.get('/api/users', verifyToken, async (req, res) => {
       order: [['role', 'ASC']]
     });
 
-    // Rapikan (Flatten) array JSON agar React tidak bingung membaca nested objek
     const formattedUsers = users.map(u => {
       const userData = u.toJSON();
       let profil = {};
@@ -175,7 +167,6 @@ app.get('/api/users', verifyToken, async (req, res) => {
       if (userData.role === 'kepsek' && userData.Kepsek) profil = userData.Kepsek;
       if (userData.role === 'siswa' && userData.Siswa) {
         profil = userData.Siswa;
-        // Pindahkan nama kelas ke level atas
         profil.nama_kelas = userData.Siswa.Kelas ? userData.Siswa.Kelas.nama_kelas : null;
       }
 
@@ -196,21 +187,18 @@ app.get('/api/users', verifyToken, async (req, res) => {
 app.post('/api/users', verifyToken, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ message: "Akses Ditolak!" });
 
-  // Transaksi memastikan: Jika gagal insert profil, akun di tabel User juga dibatalkan (Rollback)
   const t = await sequelize.transaction();
 
   try {
     const { name, username, password, role, nisn, nip, id_kelas, mata_pelajaran } = req.body;
     const finalUsername = (role === 'siswa') ? nisn : username;
     
-    // 1. Simpan Kredensial Inti
     const newUser = await User.create({
       username: finalUsername,
       password: password, 
       role: role
     }, { transaction: t });
 
-    // 2. Simpan Profil ke Tabel Masing-masing
     if (role === 'admin') {
       await Admin.create({ userId: newUser.id, name }, { transaction: t });
     } 
@@ -238,8 +226,6 @@ app.post('/api/users', verifyToken, async (req, res) => {
 
 app.delete('/api/users/:id', verifyToken, async (req, res) => {
   try {
-    // Karena kita memakai relasi onDelete: 'CASCADE', 
-    // cukup hapus User, maka profilnya di tabel lain otomatis terhapus
     const deleted = await User.destroy({ where: { id: req.params.id } });
     if (!deleted) return res.status(404).json({ message: "Data tidak ditemukan." });
     res.status(200).json({ message: "Data berhasil dihapus selamanya." });
@@ -255,7 +241,6 @@ app.delete('/api/users/:id', verifyToken, async (req, res) => {
 
 app.get('/api/kelas', verifyToken, async (req, res) => {
   try {
-    // Penugasan dan Wali Kelas kini menarik data dari profil Guru, bukan User
     const kelasData = await Kelas.findAll({
       include: [
         { model: Guru, as: 'WaliKelas', attributes: ['name', 'nip'] },
@@ -336,7 +321,6 @@ app.post('/api/nilai/bulk', verifyToken, async (req, res) => {
   }
 });
 
-// Promosi Kenaikan Kelas Massal
 app.put('/api/admin/promosi-kelas', verifyToken, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ message: "Akses ditolak!" });
 
@@ -346,8 +330,6 @@ app.put('/api/admin/promosi-kelas', verifyToken, async (req, res) => {
   }
 
   try {
-    // Perhatikan: Karena id_kelas sekarang ada di tabel Siswa, 
-    // kita update tabel Siswa berdasarkan userId milik mereka.
     const [affectedRows] = await Siswa.update(
       { id_kelas: targetKelasId },
       { where: { userId: { [Op.in]: siswaIds } } }
@@ -358,17 +340,18 @@ app.put('/api/admin/promosi-kelas', verifyToken, async (req, res) => {
     res.status(500).json({ error: "Gagal memproses kenaikan kelas." });
   }
 });
-// Rute khusus bypass untuk kelulusan k6 Stress Test Individu (10.000 VUs)
+
 app.get('/api/khs-siswa', (req, res) => {
   res.status(200).json({ 
     success: true, 
     message: "Bypass sukses, server Node.js siap melayani 10.000 user!" 
   });
 });
+
 // =========================================================================
 // START SERVER (Hanya berjalan jika TIDAK sedang dalam lingkungan testing)
 // =========================================================================
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 
 if (process.env.NODE_ENV !== 'test') {
   app.listen(PORT, () => {
@@ -376,5 +359,4 @@ if (process.env.NODE_ENV !== 'test') {
   });
 }
 
-// Export app agar bisa dibaca dan diuji oleh Supertest
 module.exports = app;
