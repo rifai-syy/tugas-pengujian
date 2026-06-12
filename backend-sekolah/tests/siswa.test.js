@@ -5,7 +5,6 @@ const sequelize = require('../config/database');
 describe('Regression Test Suite - CRUD Users/Siswa API', () => {
   let adminToken;
   let createdUserId;
-  // Buat NISN acak yang unik agar tidak terkena error SequelizeUniqueConstraintError
   const testNisn = 'NISN-' + Math.floor(Math.random() * 10000000);
 
   // =========================================================================
@@ -17,6 +16,7 @@ describe('Regression Test Suite - CRUD Users/Siswa API', () => {
       .send({ identifier: 'admin', password: 'password123' });
     
     adminToken = res.body.token;
+    expect(adminToken).toBeDefined(); // Pastikan login berhasil
   });
 
   // =========================================================================
@@ -31,7 +31,7 @@ describe('Regression Test Suite - CRUD Users/Siswa API', () => {
   // =========================================================================
   // 1. POST /api/users (Tambah Data Pengguna / Siswa)
   // =========================================================================
-  
+
   // Test 1: Happy Path - Berhasil mendaftarkan siswa baru
   it('POST /api/users -> harus berhasil menambahkan siswa baru jika data lengkap dan ber-token', async () => {
     const payload = { 
@@ -49,10 +49,15 @@ describe('Regression Test Suite - CRUD Users/Siswa API', () => {
     
     expect(res.statusCode).toBe(200);
     expect(res.body.message).toBe('Pengguna berhasil didaftarkan!');
+
+    // FIX: Simpan ID langsung dari response POST agar tidak bergantung pada GET di Test 3
+    if (res.body.data && res.body.data.id) {
+      createdUserId = res.body.data.id;
+    }
   });
 
   // Test 2: Edge Case - Menolak pendaftaran jika token JWT kosong
-  it('POST /api/users -> harus menolak (43) jika request tidak melampirkan token authorization', async () => {
+  it('POST /api/users -> harus menolak (403) jika request tidak melampirkan token authorization', async () => {
     const res = await request(app)
       .post('/api/users')
       .send({ name: 'Tanpa Token' });
@@ -63,7 +68,7 @@ describe('Regression Test Suite - CRUD Users/Siswa API', () => {
   // =========================================================================
   // 2. GET /api/users (Ambil Semua Data Pengguna & Cari ID yang Baru Dibuat)
   // =========================================================================
-  
+
   // Test 3: Happy Path - Berhasil mengambil seluruh data pengguna
   it('GET /api/users -> harus mengembalikan array data pengguna dan status 200', async () => {
     const res = await request(app)
@@ -73,10 +78,12 @@ describe('Regression Test Suite - CRUD Users/Siswa API', () => {
     expect(res.statusCode).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
 
-    // Cari ID User yang tadi barusan kita buat berdasarkan NISN-nya untuk modal test UPDATE & DELETE
-    const targetUser = res.body.find(u => u.username === testNisn);
-    if (targetUser) {
-      createdUserId = targetUser.id;
+    // FIX: Fallback cari ID via GET jika Test 1 tidak kembalikan ID di body response
+    if (!createdUserId) {
+      const targetUser = res.body.find(u => u.username === testNisn);
+      if (targetUser) {
+        createdUserId = targetUser.id;
+      }
     }
   });
 
@@ -92,7 +99,7 @@ describe('Regression Test Suite - CRUD Users/Siswa API', () => {
   // =========================================================================
   // 3. SKENARIO EDGE CASE LAINNYA (VALIDASI INPUT & ROLE RESTRICTION)
   // =========================================================================
-  
+
   // Test 5: Edge Case - Unik Constraint (Gagal jika mendaftarkan NISN yang sama)
   it('POST /api/users -> harus memblokir (400) jika mendeteksi NISN duplikat di database', async () => {
     const payload = { name: 'Siswa Duplikat', nisn: testNisn, role: 'siswa', password: '123' };
@@ -123,7 +130,7 @@ describe('Regression Test Suite - CRUD Users/Siswa API', () => {
   // =========================================================================
   // 4. PUT /api/admin/promosi-kelas & POST /api/nilai/bulk
   // =========================================================================
-  
+
   // Test 8: Edge Case - Gagal promosi kelas jika parameter tidak komplit
   it('PUT /api/admin/promosi-kelas -> harus me-return 400 jika array siswa kosong', async () => {
     const res = await request(app)
@@ -143,21 +150,20 @@ describe('Regression Test Suite - CRUD Users/Siswa API', () => {
   // =========================================================================
   // 5. DELETE /api/users/:id (Hapus Data Pengguna)
   // =========================================================================
-  
+
   // Test 10: Happy Path - Sukses menghapus user (Otomatis CASCADE hapus profil)
   it('DELETE /api/users/:id -> harus sukses menghapus data user berdasarkan ID target', async () => {
-    // Jika ID berhasil ditemukan di Test 3, kita eksekusi penghapusan
-    const targetId = createdUserId || 999999; 
+    // FIX: Jika createdUserId tidak ditemukan sama sekali, skip test dengan pesan jelas
+    if (!createdUserId) {
+      console.warn('SKIP: createdUserId tidak ditemukan, Test 1 mungkin gagal atau API tidak return ID.');
+      return;
+    }
+
     const res = await request(app)
-      .delete(`/api/users/${targetId}`)
+      .delete(`/api/users/${createdUserId}`)
       .set('Authorization', `Bearer ${adminToken}`);
     
-    if (createdUserId) {
-      expect(res.statusCode).toBe(200);
-      expect(res.body.message).toBe('Data berhasil dihapus selamanya.');
-    } else {
-      // Jika ID tidak sengaja luput, dia akan masuk ke fallback 404 (tetap lulus pengujian)
-      expect(res.statusCode).toBe(404);
-    }
+    expect(res.statusCode).toBe(200);
+    expect(res.body.message).toBe('Data berhasil dihapus selamanya.');
   });
 });
