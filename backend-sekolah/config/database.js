@@ -1,5 +1,4 @@
-// config/database.js
-const { Sequelize } = require('sequelize');
+﻿const { Sequelize } = require('sequelize');
 
 const sequelize = new Sequelize(
   process.env.DB_NAME || 'siakad_sekolah_orm',
@@ -7,6 +6,7 @@ const sequelize = new Sequelize(
   process.env.DB_PASS || '',
   {
     host: process.env.DB_HOST || 'localhost',
+    port: process.env.DB_PORT || 3306,
     dialect: 'mysql',
     logging: false
   }
