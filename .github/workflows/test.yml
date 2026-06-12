@@ -1,5 +1,4 @@
 name: Node.js CI (Regression Test)
-
 on:
   push:
     branches: [ main, master ]
@@ -9,6 +8,20 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: siakad_sekolah_orm
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
 
     steps:
     - name: Checkout Repository
@@ -26,7 +39,28 @@ jobs:
         cd backend-sekolah
         npm install
 
-    - name: Run Test Suite
+    - name: Seed Database
+      env:
+        DB_HOST: 127.0.0.1
+        DB_PORT: 3306
+        DB_NAME: siakad_sekolah_orm
+        DB_USER: root
+        DB_PASS: root
       run: |
         cd backend-sekolah
+        node seed.js
+
+    - name: Run Test Suite
+      env:
+        NODE_ENV: test
+        JWT_SECRET: rahasia
+        PORT: 5000
+        DB_HOST: 127.0.0.1
+        DB_PORT: 3306
+        DB_NAME: siakad_sekolah_orm
+        DB_USER: root
+        DB_PASS: root
+      run: |
+        cd backend-sekolah
+        chmod +x node_modules/.bin/jest
         npm test

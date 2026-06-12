@@ -1,16 +1,19 @@
 // config/database.js
 const { Sequelize } = require('sequelize');
 
-// Format: new Sequelize('nama_database', 'username', 'password', { options })
-const sequelize = new Sequelize('siakad_sekolah_orm', 'root', '', {
-    host: 'localhost',
+const sequelize = new Sequelize(
+  process.env.DB_NAME || 'siakad_sekolah_orm',
+  process.env.DB_USER || 'root',
+  process.env.DB_PASS || '',
+  {
+    host: process.env.DB_HOST || 'localhost',
     dialect: 'mysql',
-    logging: false // Ubah ke console.log jika ingin melihat raw SQL yang di-generate
-});
+    logging: false
+  }
+);
 
-// Tes koneksi
 sequelize.authenticate()
-    .then(() => console.log('Koneksi Sequelize berhasil.'))
-    .catch(err => console.error('Tidak dapat terkoneksi ke database:', err));
+  .then(() => console.log('Koneksi Sequelize berhasil.'))
+  .catch(err => console.error('Tidak dapat terkoneksi ke database:', err));
 
 module.exports = sequelize;
