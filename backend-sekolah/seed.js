@@ -2,7 +2,7 @@
 const sequelize = require('./config/database');
 const User = require('./models/User');
 const Admin = require('./models/Admin');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 
 async function seed() {
   try {
