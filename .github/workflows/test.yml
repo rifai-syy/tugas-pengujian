@@ -1,0 +1,31 @@
+name: Node.js CI (Regression Test)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js Environment
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+        cache: 'npm'
+
+    - name: Install Dependencies
+      run: |
+        cd backend-sekolah
+        npm install
+
+    - name: Run Test Suite
+      run: |
+        cd backend-sekolah
+        npm test
