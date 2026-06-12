@@ -2,7 +2,7 @@
 const sequelize = require('./config/database');
 const User = require('./models/User');
 const Admin = require('./models/Admin');
-const bcrypt = require('bcryptjs');
+
 
 async function seed() {
   try {
@@ -11,10 +11,9 @@ async function seed() {
     console.log('✓ Database synced');
 
     // Buat user admin
-    const hashedPassword = await bcrypt.hash('password123', 10);
-    const adminUser = await User.create({
-      username: 'admin',
-      password: hashedPassword,
+   const adminUser = await User.create({
+  username: 'admin',
+  password: 'password123',
       role: 'admin'
     });
     console.log('✓ User admin dibuat, id:', adminUser.id);
