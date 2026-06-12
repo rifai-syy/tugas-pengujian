@@ -1,25 +1,21 @@
-// seed.js - Jalankan sekali sebelum test untuk isi data awal
-const sequelize = require('./config/database');
-const User = require('./models/User');
-const Admin = require('./models/Admin');
+﻿const sequelize = require('./config/database');
+require('./models');
 
 async function seed() {
   try {
     await sequelize.sync({ force: true });
-    console.log('✓ Database synced');
+    console.log('✓ Semua tabel berhasil dibuat');
+
+    const { User, Admin } = require('./models');
 
     const adminUser = await User.create({
       username: 'admin',
       password: 'password123',
       role: 'admin'
     });
-    console.log('✓ User admin dibuat, id:', adminUser.id);
 
-    await Admin.create({
-      userId: adminUser.id,
-      name: 'Administrator'
-    });
-    console.log('✓ Seeding selesai');
+    await Admin.create({ userId: adminUser.id, name: 'Administrator' });
+    console.log('✓ Seeding selesai, admin id:', adminUser.id);
 
     await sequelize.close();
     process.exit(0);
