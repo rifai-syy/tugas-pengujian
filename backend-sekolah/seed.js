@@ -3,29 +3,24 @@ const sequelize = require('./config/database');
 const User = require('./models/User');
 const Admin = require('./models/Admin');
 
-
 async function seed() {
   try {
-    // Sync semua tabel (force: true = hapus & buat ulang)
     await sequelize.sync({ force: true });
     console.log('✓ Database synced');
 
-    // Buat user admin
-   const adminUser = await User.create({
-  username: 'admin',
-  password: 'password123',
+    const adminUser = await User.create({
+      username: 'admin',
+      password: 'password123',
       role: 'admin'
     });
     console.log('✓ User admin dibuat, id:', adminUser.id);
 
-    // Buat profil admin
     await Admin.create({
       userId: adminUser.id,
       name: 'Administrator'
     });
-    console.log('✓ Profil admin dibuat');
-
     console.log('✓ Seeding selesai');
+
     await sequelize.close();
     process.exit(0);
   } catch (err) {
